@@ -1,0 +1,53 @@
+
+# General
+*.tmp
+*.log
+*.bak
+
+# Windows/Mac garbage files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Python
+*.py[cod]
+
+# Python packages
+*.egg
+*.egg-info
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+pip-log.txt
+
+# VS Code
+.vscode/
+
+# Ren'py
+*.rpyb
+*.rpyc
+*.rpymc
+
+# Ren'py data
+game/saves/
+game/cache/
+
+# Ren'py logs
+traceback.txt
+log.txt
+errors.txt
+image_cache.txt
+
+# Graphics
+*.kra
+*.kra~
+*.psd
+*.psd~
+*.png~
