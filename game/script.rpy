@@ -1,9 +1,14 @@
 ﻿image bg = "#333"
 
 label start:
-    scene bg
-    show screen hsv_test()
-    $ color_picker(new_color)
+    menu:
+        "Color picker":
+            scene bg
+            show screen hsv_test()
+            $ color_picker(new_color)
+        "RGB test":
+            show screen rgb_test()
+            pause
     return
 
 screen hsv_test():
@@ -11,19 +16,32 @@ screen hsv_test():
         fit_first True
         xalign 1.0
 
-        add im.MatrixColor("images/rgb/rgb.png", matrix_recolor_triple(*get_adjusted_colors(base_colors, Color(tuple(new_color)))))
+        add im.MatrixColor("images/rgb/rgb_0_main.png", matrix_recolor_rgb(*get_adjusted_colors(base_colors, Color(tuple(new_color)))))
 
-        add "images/lines.png"
+screen rgb_test():
+    fixed:
+        fit_first True
+        xalign 0.0
+
+        add im.MatrixColor("images/blending/0.png", im.matrix.tint(*Color("#f00").rgb)) zoom 0.5
+        add im.MatrixColor("images/blending/1.png", im.matrix.tint(*Color("#0f0").rgb)) zoom 0.5
+        add im.MatrixColor("images/blending/2.png", im.matrix.tint(*Color("#00f").rgb)) zoom 0.5
+
+        text "Separate layers"
+
+    fixed:
+        fit_first True
+        xalign 1.0
+
+        add im.MatrixColor("images/blending/rgb_0_main.png", matrix_recolor_rgb(Color("#f00"), Color("#0f0"), Color("#00f"))) zoom 0.5
+
+        text "Composite layers"
 
 define base_colors = (Color("#f39ebd"), Color("#c46e8d"), Color("#fedaee"))
 
 define new_color = [242, 157, 188, 255] # Same as first base color
 
 init python:
-    import colorsys
-    import math
-    import operator
-
     # Notes: Use imagemagick to combine three layers into one RGBA image
 
     # convert 0.png 1.png -compose Dst_Out -composite r.png
@@ -45,20 +63,22 @@ init python:
     # https://www.imagemagick.org/Usage/files/#mpr
     # https://stackoverflow.com/questions/29736137/imagemagick-multiple-operations-in-single-invocation
 
-    def get_adjusted_colors(base_colors, ref_color):
+    def get_adjusted_colors(base_colors, ref_color, v_factors=(1.0, 1.0, 0.7)):
         r = ref_color.hsv
         b = base_colors[0].hsv
-        h, s, v = (r[0] - b[0], r[1] / b[1] if b[1] > 0 else 1.0, r[2] - b[2])
-        #h, s, v = map(operator.sub, ref_color.hsv, base_colors[0].hsv)
-        #h, l, s = map(operator.sub, ref_color.hls, base_colors[0].hls)
+        h = r[0] - b[0]
+        s = r[1] / b[1] if b[1] > 0 else 1.0
+        v = r[2] - b[2] # or: r[2] / b[2] if b[2] > 0 else 1.0
         new_colors = []
-        for c in base_colors:
-            rgb = colorsys.hsv_to_rgb(c.hsv[0] + h, c.hsv[1] * s, c.hsv[2] + v)
-            #rgb = colorsys.hls_to_rgb(c.hls[0] + h, c.hls[1] + l, c.hls[2] + s)
-            new_colors.append(Color(rgb=rgb))
+        for i, c in enumerate(base_colors):
+            new_colors.append(Color(hsv=(
+                c.hsv[0] + h,
+                c.hsv[1] * s,
+                c.hsv[2] + v * v_factors[i] # or: c.hsv[2] * v * v_factors[i] - (1.0 - v_factors[i]) * c.hsv[2]
+            )))
         return tuple(new_colors)
 
-    def matrix_recolor_triple(color_r, color_g, color_b):
+    def matrix_recolor_rgb(color_r, color_g, color_b):
         # Use RGB channels to mix three different colours
         cr = color_r.rgb
         cg = color_g.rgb
