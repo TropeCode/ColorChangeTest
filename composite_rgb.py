@@ -47,14 +47,27 @@ if path_fail:
 if args.gray:
     print("Using grayscale input format.")
 
+def fast_scandir(dirname):
+    subfolders= [f.path for f in os.scandir(dirname) if f.is_dir()]
+    for dirname in list(subfolders):
+        subfolders.extend(fast_scandir(dirname))
+    return subfolders
+
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
 
-#TODO Implement recursive option
+if args.recursive:
+    paths = []
+    for path in args.path:
+        paths.append(path)
+        paths.extend(fast_scandir(path))
+    paths.sort()
+else:
+    paths = args.path
 
-for path in args.path:
+for path in paths:
     print("Scanning path: {}".format(path))
     groups = {}
     with os.scandir(path) as it:
@@ -79,61 +92,29 @@ for path in args.path:
 
         cs = int((len(files) - 1) / 3)
         for c, chunk in enumerate(chunks(files, 3)):
-            cmd = ["magick", "-define", "profile:skip=\"*\"", "-background", "rgba(0,0,0,0)"]
+            cmd = ["magick", "-define", "profile:skip=\"*\""]
 
-            #FIXME Combine doesn't replicate layered properly (blending becomes additive), need to use composite with tinted layers instead
-
-            # Alpha channel
-            if len(chunk) == 3:
-                cmd.extend(["(", "(", chunk[0], chunk[1], "-compose", "Over", "-composite", ")", chunk[2], "-composite", ")"])
-            elif len(chunk) == 2:
-                cmd.extend(["(", chunk[0], chunk[1], "-compose", "Over", "-composite", ")"])
-            elif len(chunk) == 1:
-                cmd.extend([chunk[0]])
-
-            cmd.extend(["-channel", "A", "-separate", "-write", "mpr:a", "-delete", "0--1"])
-
-            # Layer channels
-            src = "R" if args.gray else "A"
-            mpr = 0
-            if len(chunk) == 3:
-                cmd.extend(["(", chunk[0], chunk[1], "-compose", "Dst_Out", "-composite", ")"])
-                cmd.extend([chunk[2], "-compose", "Dst_Out", "-composite"])
-                if args.gray:
-                    cmd.extend(["-alpha", "Remove"])
-                cmd.extend(["-channel", src, "-separate", "-write", "mpr:{}".format(mpr), "-delete", "0--1"])
-                chunk.pop(0)
-                mpr += 1
-
-            if len(chunk) == 2:
-                cmd.extend([chunk[0], chunk[1], "-compose", "Dst_Out", "-composite"])
-                if args.gray:
-                    cmd.extend(["-alpha", "Remove"])
-                cmd.extend(["-channel", src, "-separate", "-write", "mpr:{}".format(mpr), "-delete", "0--1"])
-                chunk.pop(0)
-                mpr += 1
-
-            if len(chunk) == 1:
-                cmd.extend([chunk[0]])
-                if args.gray:
-                    cmd.extend(["-alpha", "Remove"])
-                cmd.extend(["-channel", src, "-separate", "-write", "mpr:{}".format(mpr), "-delete", "0--1"])
-                chunk.pop(0)
-                mpr += 1
-
-            # Combine the channels
             cmd.append("(")
-            cmd.extend(["mpr:{}".format(m) for m in range(0, mpr)])
-            cmd.extend(["canvas:none" for m in range(mpr, 3)])
-            cmd.extend(["mpr:a", "-channel", "RGBA", "-combine"])
-            if mpr < 3:
-                cmd.extend(["-channel", "RGB"[mpr:], "-evaluate", "set", "0", "+channel"])
 
-            if c == cs and outline:
-                # Include outline in last chunk (assumed to be black)
-                cmd.extend([outline, "-compose", "Over", "-composite"])
+            clr = [("R", "GB"), ("G", "RB"), ("B", "RG")]
+            for i, img in enumerate(chunk):
+                # Isolate each layer to a color channel
+                cmd.append("(")
+                cmd.extend([img, "-colorspace", "sRGB"])
+                cmd.extend(["-channel", clr[i][1], "-evaluate", "Set", "0", "+channel"])
+                if not args.gray:
+                    cmd.extend(["-channel", clr[i][0], "-evaluate", "Set", "100%", "+channel"])
+                cmd.append(")")
+
+            cmd.extend(["-background", "rgba(0,0,0,0)", "-flatten"])
 
             cmd.append(")")
+
+            if c == cs and outline:
+                # Include black outline in last chunk
+                cmd.extend(["(", outline, "-channel", "RGB", "-evaluate", "Set", "0", "+channel", ")"])
+                cmd.extend(["-compose", "Over", "-composite"])
+
             cmd.extend(["-strip", "rgb_{}_{}.png".format(c, group)])
 
             if args.verbose:
